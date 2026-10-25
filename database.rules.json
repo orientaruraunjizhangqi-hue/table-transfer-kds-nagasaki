@@ -1,0 +1,8 @@
+{
+  "rules": {
+    "kds": {
+      ".read": true,
+      ".write": true
+    }
+  }
+}
