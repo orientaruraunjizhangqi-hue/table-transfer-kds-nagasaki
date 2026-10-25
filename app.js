@@ -18,6 +18,25 @@ var COLOR_PRESETS = [
     { id: 'stone',  name: 'ストーン (標準)',    cls: 'tbl-area-sub', dot: '#8C847B' }
 ];
 
+// 移動の区分（ワンタップ選択）
+var MOVE_TYPES = [
+    { id: '相席開始',     label: '相席開始',     sub: '新規合流', bg: '#EFE6D8', border: '#C49E6C', text: '#6B4C24' },
+    { id: 'チェンジ',     label: 'チェンジ',     sub: '組替え',   bg: '#E8EFEA', border: '#94B0A1', text: '#2D4F3E' },
+    { id: '相席解除',     label: '相席解除',     sub: '単独席へ', bg: '#EFECE6', border: '#C2B9AC', text: '#57504A' },
+    { id: '席替え',       label: '席替え',       sub: '通常移動', bg: '#ECF0F3', border: '#A6B8C7', text: '#374B5E' },
+    { id: 'VIP移動',      label: 'VIP移動',      sub: '',         bg: '#F5EBD6', border: '#B8894A', text: '#5E3E14' },
+    { id: 'ダーツ移動',   label: 'ダーツ移動',   sub: '',         bg: '#EFEBF2', border: '#B4A6C4', text: '#4A3B5C' },
+    { id: 'カラオケ移動', label: 'カラオケ移動', sub: '単独',     bg: '#F4ECEB', border: '#CFA8A4', text: '#6E3D39' }
+];
+
+// ワンタップ定型タグ（複数選択可）
+var QUICK_TAGS = [
+    { id: '荷物・カゴあり',   urgent: false },
+    { id: '上着・コートあり', urgent: false },
+    { id: '下げもの多め',     urgent: false },
+    { id: 'お急ぎ対応',       urgent: true  }
+];
+
 // 長崎店 6行×5列 フロア配置 (null は空マス「—」)
 var FLOOR_LAYOUT = [
     ['A1', null, 'B1', 'B2', 'B3'],
@@ -60,18 +79,10 @@ var soundEnabled = true;
 
 // Selection State
 var selectedGender = '男性';
+var selectedMoveType = '相席開始';
 var selectedFromTable = 'A1';
 var selectedToTable = 'B1';
-var activeNoteMode = 'text'; // 'text' | 'canvas'
-
-// Modal Canvas State
-var ticketCanvas = document.getElementById('ticketCanvas');
-var ticketCtx = ticketCanvas.getContext('2d');
-var isDrawing = false;
-var modalPenColor = '#2C2623';
-var modalPenWidth = 3.5;
-var modalTool = 'pen';
-var lastPt = { x: 0, y: 0 };
+var selectedTags = [];
 
 // ===================== ユーティリティ =====================
 function findBy(arr, fn) {
@@ -79,6 +90,10 @@ function findBy(arr, fn) {
     return null;
 }
 function someBy(arr, fn) { return !!findBy(arr, fn); }
+function indexOfStr(arr, val) {
+    for (var i = 0; i < arr.length; i++) { if (arr[i] === val) return i; }
+    return -1;
+}
 function cloneTables(list) {
     var out = [];
     for (var i = 0; i < list.length; i++) {
@@ -112,7 +127,6 @@ window.onload = function () {
     detectFlexGap();
     lucide.createIcons();
     startClock();
-    initModalCanvas();
     initAudioUnlock();
     switchMainTab('ACTIVE');
     setInterval(updateTimersUI, 1000);
@@ -146,6 +160,10 @@ function getTableColorObj(tblName) {
     var found = findBy(registeredTables, function (t) { return t.name === tblName; });
     var colorId = found ? found.colorId : guessDefaultColorId(tblName);
     return findBy(COLOR_PRESETS, function (p) { return p.id === colorId; }) || COLOR_PRESETS[0];
+}
+
+function getMoveTypeObj(typeId) {
+    return findBy(MOVE_TYPES, function (m) { return m.id === typeId; }) || MOVE_TYPES[0];
 }
 
 // ===================== 通知音 (落ち着いたチャイム音) =====================
@@ -273,21 +291,44 @@ function renderAllViews() {
     lucide.createIcons();
 }
 
-function renderNoteHtml(order) {
-    if (order.noteType === 'text' && order.textNote) {
-        return '<div style="background-color: #FAF8F5; border: 1px solid #E5DEC9;" class="mb-3 rounded-lg p-2.5">' +
-            '<div style="color: #8C6D46;" class="text-[10px] font-bold mb-1 flex items-center gap-1">' +
-            '<i data-lucide="message-square" class="w-3 h-3"></i> 指示メモ</div>' +
-            '<div style="color: #2C2623;" class="text-xs font-medium leading-relaxed break-words">' + escapeHtml(order.textNote) + '</div>' +
-            '</div>';
-    } else if (order.noteType === 'canvas' && order.canvasData) {
-        return '<div style="background-color: #FAF8F5; border: 1px solid #E5DEC9;" class="mb-3 rounded-lg p-2">' +
-            '<div style="color: #8C6D46;" class="text-[10px] font-bold mb-1 flex items-center gap-1">' +
-            '<i data-lucide="pen-tool" class="w-3 h-3"></i> 手書きメモ</div>' +
-            '<img src="' + escapeHtml(order.canvasData) + '" style="background-color: #FFFFFF; border: 1px solid #EBE5D8;" class="w-full h-auto max-h-20 object-contain rounded" alt="Note">' +
+function getOrderTags(order) {
+    if (!order.tags) return [];
+    if (Object.prototype.toString.call(order.tags) === '[object Array]') return order.tags;
+    var out = [];
+    for (var k in order.tags) if (order.tags.hasOwnProperty(k) && order.tags[k]) out.push(order.tags[k]);
+    return out;
+}
+
+function renderTagsAndNoteHtml(order) {
+    var tags = getOrderTags(order);
+    var hasText = !!(order.textNote && String(order.textNote).trim());
+    if (tags.length === 0 && !hasText) return '';
+
+    var tagsHtml = '';
+    if (tags.length > 0) {
+        var chips = [];
+        for (var i = 0; i < tags.length; i++) {
+            var t = tags[i];
+            var isUrgent = (t === 'お急ぎ対応');
+            var style = isUrgent
+                ? 'background-color: #9E3328; color: #FFFFFF; border: 1px solid #9E3328;'
+                : 'background-color: #EDE8DF; color: #4A423D; border: 1px solid #D5CBB8;';
+            chips.push('<span style="' + style + '" class="inline-block text-[11px] font-bold px-2.5 py-0.5 rounded mr-1.5 mb-1.5">' + escapeHtml(t) + '</span>');
+        }
+        tagsHtml = '<div class="flex flex-wrap -mb-1">' + chips.join('') + '</div>';
+    }
+
+    var textHtml = '';
+    if (hasText) {
+        textHtml = '<div style="color: #2C2623;" class="text-xs font-medium leading-relaxed break-words ' + (tags.length > 0 ? 'mt-1.5 pt-1.5 border-t border-stone-200' : '') + '">' +
+            escapeHtml(order.textNote) +
             '</div>';
     }
-    return '';
+
+    return '<div style="background-color: #FAF8F5; border: 1px solid #E5DEC9;" class="mb-3 rounded-lg p-2.5">' +
+        tagsHtml +
+        textHtml +
+        '</div>';
 }
 
 function renderActiveOrders() {
@@ -311,19 +352,23 @@ function renderActiveOrders() {
         var elapsedSecs = Math.floor((elapsedMs % 60000) / 1000);
 
         var isMale = (order.gender || '男性') === '男性';
+        var tags = getOrderTags(order);
+        var hasUrgentTag = indexOfStr(tags, 'お急ぎ対応') !== -1;
 
-        // クラシカルで上品なカード配色（白・アイボリー基調＋上端のアクセントライン）
         var cardBg = isMale ? '#FAFBFD' : '#FDFBFA';
         var cardBorder = isMale ? '#C5D1DF' : '#E2C6C8';
         var topBarColor = isMale ? '#344E68' : '#7D4449';
         var badgeStyle = isMale
             ? 'background-color: #344E68; color: #FFFFFF;'
             : 'background-color: #7D4449; color: #FFFFFF;';
-        var genderLabel = isMale ? '男性 / MALE' : '女性 / FEMALE';
+        var genderLabel = isMale ? '男性' : '女性';
+
+        var mvObj = getMoveTypeObj(order.moveType || '相席開始');
+        var mvBadgeStyle = 'background-color: ' + mvObj.bg + '; color: ' + mvObj.text + '; border: 1px solid ' + mvObj.border + ';';
 
         var timerStyle = 'background-color: #EFF3F0; color: #365244; border: 1px solid #B8CEC2;';
         var urgencyCls = '';
-        if (elapsedMins >= 10) {
+        if (elapsedMins >= 10 || hasUrgentTag) {
             urgencyCls = 'urgency-danger';
             timerStyle = 'background-color: #FBE9E7; color: #9E3328; border: 1px solid #DFA39C;';
         } else if (elapsedMins >= 5) {
@@ -340,11 +385,16 @@ function renderActiveOrders() {
         card.style.borderTop = '4px solid ' + topBarColor;
 
         card.innerHTML =
-            '<div style="border-bottom: 1px solid #EAE3D5;" class="flex items-center justify-between pb-2.5 mb-3">' +
-                '<span style="' + badgeStyle + '" class="text-[11px] px-2.5 py-1 rounded font-bold tracking-wider">' +
-                    genderLabel +
-                '</span>' +
-                '<div style="' + timerStyle + '" class="px-2.5 py-0.5 rounded text-xs font-mono font-bold flex items-center space-x-1" data-timer="' + order.createdAt + '">' +
+            '<div style="border-bottom: 1px solid #EAE3D5;" class="flex items-center justify-between pb-2.5 mb-3 gap-1">' +
+                '<div class="flex items-center gap-1.5 flex-wrap">' +
+                    '<span style="' + badgeStyle + '" class="text-[11px] px-2.5 py-0.5 rounded font-bold tracking-wider">' +
+                        genderLabel +
+                    '</span>' +
+                    '<span style="' + mvBadgeStyle + '" class="text-[11px] px-2.5 py-0.5 rounded font-bold">' +
+                        escapeHtml(mvObj.label) +
+                    '</span>' +
+                '</div>' +
+                '<div style="' + timerStyle + '" class="px-2 py-0.5 rounded text-xs font-mono font-bold flex items-center space-x-1 flex-none" data-timer="' + order.createdAt + '">' +
                     '<i data-lucide="clock" class="w-3.5 h-3.5"></i>' +
                     '<span>' + pad(elapsedMins) + ':' + pad(elapsedSecs) + '</span>' +
                 '</div>' +
@@ -362,7 +412,7 @@ function renderActiveOrders() {
                     '<div class="inline-block px-3.5 py-1 rounded-md border font-black text-lg font-mono ' + toColor.cls + '">' + escapeHtml(order.toTable) + '</div>' +
                 '</div>' +
             '</div>' +
-            renderNoteHtml(order) +
+            renderTagsAndNoteHtml(order) +
             '<button onclick="completeOrder(\'' + escapeJsAttr(order.id) + '\')" style="background-color: #4A6B5B; color: #FFFFFF;" class="mt-auto w-full py-2.5 hover:opacity-90 rounded-lg font-bold text-xs sm:text-sm shadow-sm transition-all flex items-center justify-center gap-1.5">' +
                 '<i data-lucide="check-circle" class="w-4 h-4"></i>' +
                 '<span>移動完了</span>' +
@@ -382,9 +432,12 @@ function renderCompletedOrders() {
 
     if (search) {
         completed = completed.filter(function (o) {
+            var tagsStr = getOrderTags(o).join(' ').toLowerCase();
             return String(o.fromTable).toLowerCase().indexOf(search) !== -1 ||
                 String(o.toTable).toLowerCase().indexOf(search) !== -1 ||
                 (o.gender && o.gender.toLowerCase().indexOf(search) !== -1) ||
+                (o.moveType && o.moveType.toLowerCase().indexOf(search) !== -1) ||
+                tagsStr.indexOf(search) !== -1 ||
                 (o.textNote && o.textNote.toLowerCase().indexOf(search) !== -1);
         });
     }
@@ -403,24 +456,31 @@ function renderCompletedOrders() {
         var badgeStyle = isMale
             ? 'background-color: #344E68; color: #FFFFFF;'
             : 'background-color: #7D4449; color: #FFFFFF;';
+        var mvObj = getMoveTypeObj(order.moveType || '相席開始');
+        var mvBadgeStyle = 'background-color: ' + mvObj.bg + '; color: ' + mvObj.text + '; border: 1px solid ' + mvObj.border + ';';
+
         var fromColor = getTableColorObj(order.fromTable);
         var toColor = getTableColorObj(order.toTable);
 
-        var notePreview = '';
-        if (order.noteType === 'text' && order.textNote) {
-            notePreview = '<span style="color: #8C6D46;">メモ: ' + escapeHtml(order.textNote) + '</span>';
-        } else if (order.noteType === 'canvas' && order.canvasData) {
-            notePreview = '<span style="color: #8C6D46;">手書きメモあり</span>';
-        }
+        var tags = getOrderTags(order);
+        var summaryParts = [];
+        if (tags.length > 0) summaryParts.push(tags.join(' / '));
+        if (order.textNote) summaryParts.push(order.textNote);
+        var notePreview = summaryParts.length > 0
+            ? '<span style="color: #8C6D46;">' + escapeHtml(summaryParts.join(' — ')) + '</span>'
+            : '';
 
         var row = document.createElement('div');
         row.className = 'rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm';
         row.style.backgroundColor = '#FDFBF7';
         row.style.border = '1px solid #DCD4C6';
         row.innerHTML =
-            '<div class="flex items-center space-x-3 flex-1 min-w-0">' +
-                '<span style="' + badgeStyle + '" class="text-[11px] px-2.5 py-1 rounded font-bold flex-none">' +
+            '<div class="flex items-center space-x-2.5 flex-1 min-w-0 flex-wrap gap-y-1">' +
+                '<span style="' + badgeStyle + '" class="text-[11px] px-2 py-0.5 rounded font-bold flex-none">' +
                     escapeHtml(order.gender || '男性') +
+                '</span>' +
+                '<span style="' + mvBadgeStyle + '" class="text-[11px] px-2 py-0.5 rounded font-bold flex-none">' +
+                    escapeHtml(mvObj.label) +
                 '</span>' +
                 '<div class="flex items-center gap-1.5 flex-none font-mono font-bold text-sm">' +
                     '<span class="px-2.5 py-0.5 rounded border ' + fromColor.cls + '">' + escapeHtml(order.fromTable) + '</span>' +
@@ -428,9 +488,9 @@ function renderCompletedOrders() {
                     '<span class="px-2.5 py-0.5 rounded border ' + toColor.cls + '">' + escapeHtml(order.toTable) + '</span>' +
                 '</div>' +
                 '<div class="truncate">' +
-                    '<div style="color: #2C2623;" class="text-xs font-bold truncate">卓移動 ' + (notePreview ? '• ' + notePreview : '') + '</div>' +
-                    '<div style="color: #8C8278;" class="text-[11px] flex items-center gap-2 mt-0.5">' +
-                        '<span>完了時刻: ' + finishedTime + '</span><span>•</span><span>' + escapeHtml(order.no || order.id) + '</span>' +
+                    (notePreview ? '<div class="text-xs font-bold truncate">' + notePreview + '</div>' : '') +
+                    '<div style="color: #8C8278;" class="text-[11px] flex items-center gap-2">' +
+                        '<span>完了: ' + finishedTime + '</span><span>•</span><span>' + escapeHtml(order.no || order.id) + '</span>' +
                     '</div>' +
                 '</div>' +
             '</div>' +
@@ -449,7 +509,7 @@ function completeOrder(id) {
     if (order) {
         Sync.updateOrder(id, { status: 'COMPLETED', completedAt: Date.now() });
         playChime('complete');
-        showToast('移動完了', (order.gender || '') + ' ' + order.fromTable + ' ➔ ' + order.toTable + ' の移動を完了しました');
+        showToast('移動完了', (order.moveType || '') + ' ' + order.fromTable + ' ➔ ' + order.toTable + ' を完了しました');
     }
 }
 
@@ -457,7 +517,7 @@ function restoreOrder(id) {
     var order = findBy(orders, function (o) { return o.id === id; });
     if (order) {
         Sync.updateOrder(id, { status: 'ACTIVE', completedAt: null });
-        showToast('伝票を復元', (order.gender || '') + ' ' + order.fromTable + ' ➔ ' + order.toTable + ' を移動待ちに戻しました');
+        showToast('伝票を復元', order.fromTable + ' ➔ ' + order.toTable + ' を移動待ちに戻しました');
     }
 }
 
@@ -566,7 +626,7 @@ function renderMgmtTablesGrid() {
     lucide.createIcons();
 }
 
-// ===================== オーダー発行モーダル (6×5 フロア配置) =====================
+// ===================== オーダー発行モーダル =====================
 function selectGender(gender) {
     selectedGender = gender;
     renderGenderButtons();
@@ -599,6 +659,79 @@ function renderGenderButtons() {
     }
 }
 
+function selectMoveType(typeId) {
+    selectedMoveType = typeId;
+    renderMoveTypeButtons();
+}
+
+function renderMoveTypeButtons() {
+    var container = document.getElementById('moveTypeButtons');
+    container.innerHTML = '';
+
+    MOVE_TYPES.forEach(function (m) {
+        var active = (selectedMoveType === m.id);
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.onclick = function () { selectMoveType(m.id); };
+        btn.className = 'chip-btn px-2.5 py-1.5 rounded-lg border text-xs font-bold transition-all';
+        if (active) {
+            btn.style.backgroundColor = '#3A322D';
+            btn.style.borderColor = '#3A322D';
+            btn.style.color = '#FAF8F5';
+            btn.style.boxShadow = '0 1px 4px rgba(58, 50, 45, 0.22)';
+        } else {
+            btn.style.backgroundColor = '#FFFFFF';
+            btn.style.borderColor = '#DCD4C6';
+            btn.style.color = '#4A423D';
+        }
+        btn.textContent = m.label;
+        container.appendChild(btn);
+    });
+}
+
+function toggleQuickTag(tagId) {
+    var idx = indexOfStr(selectedTags, tagId);
+    if (idx === -1) {
+        selectedTags.push(tagId);
+    } else {
+        selectedTags.splice(idx, 1);
+    }
+    renderQuickTagButtons();
+}
+
+function renderQuickTagButtons() {
+    var container = document.getElementById('quickTagButtons');
+    container.innerHTML = '';
+
+    QUICK_TAGS.forEach(function (t) {
+        var active = indexOfStr(selectedTags, t.id) !== -1;
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.onclick = function () { toggleQuickTag(t.id); };
+        btn.className = 'chip-btn px-3 py-1.5 rounded-lg border text-xs font-bold transition-all flex items-center gap-1.5';
+
+        if (active) {
+            if (t.urgent) {
+                btn.style.backgroundColor = '#9E3328';
+                btn.style.borderColor = '#9E3328';
+                btn.style.color = '#FFFFFF';
+            } else {
+                btn.style.backgroundColor = '#8C6D46';
+                btn.style.borderColor = '#8C6D46';
+                btn.style.color = '#FFFFFF';
+            }
+        } else {
+            btn.style.backgroundColor = '#FAF8F5';
+            btn.style.borderColor = '#DCD4C6';
+            btn.style.color = t.urgent ? '#9E3328' : '#4A423D';
+        }
+
+        var checkMark = active ? '✓ ' : '+ ';
+        btn.textContent = checkMark + t.id;
+        container.appendChild(btn);
+    });
+}
+
 function createFloorButton(tblName, isSelected, selClass, onClickFn) {
     var colorObj = getTableColorObj(tblName);
     var btn = document.createElement('button');
@@ -612,12 +745,14 @@ function createFloorButton(tblName, isSelected, selClass, onClickFn) {
 
 function renderTableButtons() {
     renderGenderButtons();
+    renderMoveTypeButtons();
+    renderQuickTagButtons();
+
     var fromContainer = document.getElementById('fromTableButtons');
     var toContainer = document.getElementById('toTableButtons');
     fromContainer.innerHTML = '';
     toContainer.innerHTML = '';
 
-    // 登録済みの卓マップ
     var regMap = {};
     registeredTables.forEach(function (t) { regMap[t.name] = t; });
     var placed = {};
@@ -681,36 +816,10 @@ function renderTableButtons() {
 function selectFromTable(tbl) { selectedFromTable = tbl; renderTableButtons(); }
 function selectToTable(tbl) { selectedToTable = tbl; renderTableButtons(); }
 
-function switchNoteMode(mode) {
-    activeNoteMode = mode;
-    var btnText = document.getElementById('noteTabBtnText');
-    var btnCanvas = document.getElementById('noteTabBtnCanvas');
-    var secText = document.getElementById('noteModeText');
-    var secCanvas = document.getElementById('noteModeCanvas');
-
-    if (mode === 'text') {
-        btnText.style.backgroundColor = '#3A322D';
-        btnText.style.color = '#FAF8F5';
-        btnCanvas.style.backgroundColor = 'transparent';
-        btnCanvas.style.color = '#6E655F';
-        secText.classList.remove('hidden');
-        secCanvas.classList.add('hidden');
-    } else {
-        btnText.style.backgroundColor = 'transparent';
-        btnText.style.color = '#6E655F';
-        btnCanvas.style.backgroundColor = '#3A322D';
-        btnCanvas.style.color = '#FAF8F5';
-        secText.classList.add('hidden');
-        secCanvas.classList.remove('hidden');
-        setTimeout(resizeModalCanvas, 50);
-    }
-}
-
 function openOrderModal() {
-    renderTableButtons();
-    clearModalCanvas();
+    selectedTags = [];
     document.getElementById('textNoteInput').value = '';
-    switchNoteMode('text');
+    renderTableButtons();
     document.getElementById('orderModal').classList.remove('hidden');
 }
 
@@ -728,118 +837,25 @@ function submitTransferOrder() {
         return;
     }
 
-    var canvasData = null;
-    var textNote = '';
-    if (activeNoteMode === 'text') {
-        textNote = document.getElementById('textNoteInput').value.trim();
-    } else if (activeNoteMode === 'canvas' && hasCanvasContent(ticketCanvas)) {
-        canvasData = ticketCanvas.toDataURL();
-    }
+    var textNote = document.getElementById('textNoteInput').value.trim();
+    var tagsCopy = selectedTags.slice(0);
 
     Sync.addOrder({
         no: genDisplayNo(),
         gender: selectedGender,
+        moveType: selectedMoveType,
         fromTable: selectedFromTable,
         toTable: selectedToTable,
         item: '移動',
         createdAt: Date.now(),
         status: 'ACTIVE',
-        noteType: activeNoteMode,
-        canvasData: canvasData,
+        tags: tagsCopy,
+        noteType: 'text',
         textNote: textNote
     });
     closeOrderModal();
     playChime('push');
-    showToast('移動指示を送信', selectedGender + '  ' + selectedFromTable + ' ➔ ' + selectedToTable);
-}
-
-// ===================== 手書きキャンバス =====================
-function initModalCanvas() {
-    if (window.PointerEvent) {
-        ticketCanvas.addEventListener('pointerdown', startModalDraw, false);
-        ticketCanvas.addEventListener('pointermove', modalDraw, false);
-        ticketCanvas.addEventListener('pointerup', stopModalDraw, false);
-        ticketCanvas.addEventListener('pointercancel', stopModalDraw, false);
-    } else {
-        ticketCanvas.addEventListener('touchstart', startModalDraw, false);
-        ticketCanvas.addEventListener('touchmove', modalDraw, false);
-        ticketCanvas.addEventListener('touchend', stopModalDraw, false);
-        ticketCanvas.addEventListener('touchcancel', stopModalDraw, false);
-        ticketCanvas.addEventListener('mousedown', startModalDraw, false);
-        ticketCanvas.addEventListener('mousemove', modalDraw, false);
-        window.addEventListener('mouseup', stopModalDraw, false);
-    }
-}
-
-function resizeModalCanvas() {
-    var rect = ticketCanvas.parentElement.getBoundingClientRect();
-    ticketCanvas.width = rect.width || 300;
-    ticketCanvas.height = rect.height || 100;
-    ticketCtx.lineCap = 'round';
-    ticketCtx.lineJoin = 'round';
-}
-
-function getModalPt(e) {
-    var rect = ticketCanvas.getBoundingClientRect();
-    var src = (e.touches && e.touches.length) ? e.touches[0] : e;
-    return { x: src.clientX - rect.left, y: src.clientY - rect.top };
-}
-
-function startModalDraw(e) {
-    if (e.type === 'touchstart') e.preventDefault();
-    isDrawing = true;
-    lastPt = getModalPt(e);
-}
-
-function modalDraw(e) {
-    if (!isDrawing) return;
-    e.preventDefault();
-    var currentPt = getModalPt(e);
-    ticketCtx.beginPath();
-    if (modalTool === 'eraser') {
-        ticketCtx.globalCompositeOperation = 'destination-out';
-        ticketCtx.lineWidth = modalPenWidth * 4;
-    } else {
-        ticketCtx.globalCompositeOperation = 'source-over';
-        ticketCtx.strokeStyle = modalPenColor;
-        ticketCtx.lineWidth = modalPenWidth;
-    }
-    ticketCtx.moveTo(lastPt.x, lastPt.y);
-    ticketCtx.lineTo(currentPt.x, currentPt.y);
-    ticketCtx.stroke();
-    lastPt = currentPt;
-}
-
-function stopModalDraw() { isDrawing = false; }
-
-function setModalPenColor(color) {
-    modalPenColor = color;
-    setModalTool('pen');
-    var btns = document.querySelectorAll('.modal-color-btn');
-    for (var i = 0; i < btns.length; i++) {
-        var btn = btns[i];
-        var cls = ['ring-2', 'ring-stone-500', 'ring-offset-1'];
-        for (var j = 0; j < cls.length; j++) {
-            if (btn.getAttribute('data-color') === color) btn.classList.add(cls[j]);
-            else btn.classList.remove(cls[j]);
-        }
-    }
-}
-
-function setModalTool(tool) {
-    modalTool = tool;
-    var eraserBtn = document.getElementById('modalEraserBtn');
-    eraserBtn.style.backgroundColor = tool === 'eraser' ? '#DCD4C6' : 'transparent';
-}
-
-function clearModalCanvas() {
-    ticketCtx.clearRect(0, 0, ticketCanvas.width, ticketCanvas.height);
-}
-
-function hasCanvasContent(canvas) {
-    var data = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
-    for (var i = 3; i < data.length; i += 4) { if (data[i] !== 0) return true; }
-    return false;
+    showToast('移動指示を送信', '【' + selectedMoveType + '】' + selectedGender + ' ' + selectedFromTable + ' ➔ ' + selectedToTable);
 }
 
 // ===================== トースト =====================
@@ -899,7 +915,8 @@ function applyRemoteTables(tables) {
 
 function notifyRemoteOrder(order) {
     playChime('push');
-    showToast('新規卓移動オーダー', (order.gender || '') + '  ' + order.fromTable + ' ➔ ' + order.toTable);
+    var mv = order.moveType ? '【' + order.moveType + '】' : '';
+    showToast('新規卓移動オーダー', mv + (order.gender || '') + ' ' + order.fromTable + ' ➔ ' + order.toTable);
 }
 
 // =====================================================================

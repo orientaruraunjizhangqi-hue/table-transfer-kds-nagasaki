@@ -6,7 +6,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <title>卓移動 KDS — 長崎</title>
-    <link rel="stylesheet" href="styles.css?v=1">
+    <link rel="stylesheet" href="styles.css?v=2">
     <style>
         /* ===== 長崎店専用: 白・ベージュ系 クラシック・シックテーマ ===== */
         :root {
@@ -52,14 +52,6 @@
         }
         .urgency-danger { -webkit-animation: pulse-terracotta 2s infinite; animation: pulse-terracotta 2s infinite; }
 
-        .bg-ticket-grid {
-            background-color: #FAF8F5;
-            background-size: 16px 16px;
-            background-image:
-                linear-gradient(to right, rgba(140, 109, 70, 0.08) 1px, transparent 1px),
-                linear-gradient(to bottom, rgba(140, 109, 70, 0.08) 1px, transparent 1px);
-        }
-
         /* ===== 古いSafari (CSS Grid 非対応) でも崩れないレイアウト ===== */
         .kds-grid { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-flex-wrap: wrap; flex-wrap: wrap; margin: -8px; }
         .kds-grid > * { width: calc(100% - 16px); margin: 8px; }
@@ -91,9 +83,19 @@
             font-size: 11px;
         }
 
+        /* 移動区分ボタン / 定型文タグ グリッド */
+        .chip-wrap {
+            display: -webkit-box; display: -webkit-flex; display: flex;
+            -webkit-flex-wrap: wrap; flex-wrap: wrap;
+            margin: -3px;
+        }
+        .chip-btn {
+            margin: 3px;
+        }
+
         .two-col { display: -webkit-box; display: -webkit-flex; display: flex; }
         .two-col > * { -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; }
-        .two-col > * + * { margin-left: 12px; }
+        .two-col > * + * { margin-left: 10px; }
 
         /* flex の gap 非対応ブラウザ用 (iOS 14.0 以下) */
         .no-flexgap .flex.gap-1:not(.flex-col) > * + *   { margin-left: 0.25rem; }
@@ -113,7 +115,7 @@
         .tbl-area-v   { background-color: #F7F1EB; border-color: #C49E6C; color: #6B4C24; } /* V卓(VIP): シャンパンゴールド */
         .tbl-area-sub { background-color: #F2EFE9; border-color: #C7C0B6; color: #57504A; } /* その他: ストーングレー */
 
-        /* 選択時の強調（派手なネオンではなく、深い輪郭線と影で表現） */
+        /* 選択時の強調 */
         .selected-from {
             box-shadow: 0 0 0 2px #8C6D46, 0 2px 6px rgba(58, 50, 45, 0.18);
             border-color: #8C6D46 !important;
@@ -227,7 +229,7 @@
 
                 <div class="relative w-full sm:w-64">
                     <i data-lucide="search" style="color: #9E948B;" class="w-4 h-4 absolute left-3 top-2.5"></i>
-                    <input type="text" id="completedSearchInput" oninput="renderCompletedOrders()" placeholder="卓番号やメモで検索..." style="background-color: #F5F2EB; border: 1px solid #DCD4C6; color: #2C2623;" class="w-full rounded-lg pl-9 pr-3 py-2 text-xs outline-none">
+                    <input type="text" id="completedSearchInput" oninput="renderCompletedOrders()" placeholder="卓番号・区分・メモで検索..." style="background-color: #F5F2EB; border: 1px solid #DCD4C6; color: #2C2623;" class="w-full rounded-lg pl-9 pr-3 py-2 text-xs outline-none">
                 </div>
             </div>
 
@@ -284,9 +286,9 @@
 
     <!-- Transfer Order Entry Modal -->
     <div id="orderModal" style="background-color: rgba(44, 38, 35, 0.45);" class="fixed inset-0 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 z-50 hidden">
-        <div style="background-color: #FDFBF7; border: 1px solid #DCD4C6;" class="rounded-xl max-w-xl w-full max-h-[95vh] flex flex-col shadow-xl overflow-hidden">
+        <div style="background-color: #FDFBF7; border: 1px solid #DCD4C6;" class="rounded-xl max-w-2xl w-full max-h-[96vh] flex flex-col shadow-xl overflow-hidden">
 
-            <div style="background-color: #F5F2EB; border-bottom: 1px solid #DCD4C6;" class="px-5 py-3 flex items-center justify-between">
+            <div style="background-color: #F5F2EB; border-bottom: 1px solid #DCD4C6;" class="px-5 py-2.5 flex items-center justify-between">
                 <div class="flex items-center space-x-2">
                     <i data-lucide="arrow-right-left" style="color: #8C6D46;" class="w-4 h-4"></i>
                     <h2 style="color: #2C2623;" class="font-bold text-sm sm:text-base">卓移動オーダー発行</h2>
@@ -296,31 +298,44 @@
                 </button>
             </div>
 
-            <div class="flex-1 overflow-y-auto p-4 space-y-3.5" style="-webkit-overflow-scrolling: touch;">
+            <div class="flex-1 overflow-y-auto p-4 space-y-3" style="-webkit-overflow-scrolling: touch;">
 
-                <!-- 1. Gender Selector -->
-                <div>
-                    <label style="color: #4A423D;" class="block text-xs font-bold mb-1.5">
-                        1. 移動対象を選択
-                    </label>
-                    <div class="two-col">
-                        <button type="button" onclick="selectGender('男性')" id="genderBtnMale" class="py-2.5 px-3 rounded-lg border font-bold text-xs flex items-center justify-center gap-2 transition-all">
-                            <span class="w-2.5 h-2.5 rounded-full" style="background-color: #344E68;"></span>
-                            <span class="text-sm tracking-wide">男性 (MALE)</span>
-                        </button>
-                        <button type="button" onclick="selectGender('女性')" id="genderBtnFemale" class="py-2.5 px-3 rounded-lg border font-bold text-xs flex items-center justify-center gap-2 transition-all">
-                            <span class="w-2.5 h-2.5 rounded-full" style="background-color: #7D4449;"></span>
-                            <span class="text-sm tracking-wide">女性 (FEMALE)</span>
-                        </button>
+                <!-- 1. 性別 & 移動区分 -->
+                <div class="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                    <!-- 性別 -->
+                    <div class="sm:col-span-5">
+                        <label style="color: #4A423D;" class="block text-xs font-bold mb-1.5">
+                            1. 移動対象（性別）
+                        </label>
+                        <div class="two-col">
+                            <button type="button" onclick="selectGender('男性')" id="genderBtnMale" class="py-2 px-2.5 rounded-lg border font-bold text-xs flex items-center justify-center gap-1.5 transition-all">
+                                <span class="w-2.5 h-2.5 rounded-full" style="background-color: #344E68;"></span>
+                                <span class="text-xs sm:text-sm tracking-wide">男性</span>
+                            </button>
+                            <button type="button" onclick="selectGender('女性')" id="genderBtnFemale" class="py-2 px-2.5 rounded-lg border font-bold text-xs flex items-center justify-center gap-1.5 transition-all">
+                                <span class="w-2.5 h-2.5 rounded-full" style="background-color: #7D4449;"></span>
+                                <span class="text-xs sm:text-sm tracking-wide">女性</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 移動の区分 -->
+                    <div class="sm:col-span-7">
+                        <label style="color: #4A423D;" class="block text-xs font-bold mb-1.5">
+                            2. 移動の区分
+                        </label>
+                        <div id="moveTypeButtons" class="chip-wrap">
+                            <!-- Move type buttons rendered dynamically -->
+                        </div>
                     </div>
                 </div>
 
-                <!-- 2 & 3. From / To Table Floor Layout -->
+                <!-- 3 & 4. From / To Table Floor Layout -->
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <!-- From Table -->
                     <div style="background-color: #F5F2EB; border: 1px solid #DCD4C6;" class="p-2.5 rounded-lg">
                         <label class="block text-xs font-bold mb-2 flex items-center justify-between" style="color: #4A423D;">
-                            <span>2. 移動元 (FROM)</span>
+                            <span>3. 移動元 (FROM)</span>
                             <span id="fromSelectedBadge" style="background-color: #EFE6D8; color: #5C4630; border: 1px solid #C8B094;" class="px-2 py-0.5 rounded font-mono text-xs font-bold">未選択</span>
                         </label>
                         <div id="fromTableButtons" class="floor-grid">
@@ -330,7 +345,7 @@
                     <!-- To Table -->
                     <div style="background-color: #F5F2EB; border: 1px solid #DCD4C6;" class="p-2.5 rounded-lg">
                         <label class="block text-xs font-bold mb-2 flex items-center justify-between" style="color: #4A423D;">
-                            <span>3. 移動先 (TO)</span>
+                            <span>4. 移動先 (TO)</span>
                             <span id="toSelectedBadge" style="background-color: #E3EDE8; color: #2D4F3E; border: 1px solid #A5BDB0;" class="px-2 py-0.5 rounded font-mono text-xs font-bold">未選択</span>
                         </label>
                         <div id="toTableButtons" class="floor-grid">
@@ -338,53 +353,27 @@
                     </div>
                 </div>
 
-                <!-- 4. Note -->
-                <div style="border: 1px solid #DCD4C6; background-color: #FFFFFF;" class="rounded-lg overflow-hidden">
-                    <div style="background-color: #F5F2EB; border-bottom: 1px solid #DCD4C6;" class="px-3 py-1.5 flex items-center justify-between">
-                        <span style="color: #5C4630;" class="text-xs font-bold flex items-center gap-1.5">
-                            <i data-lucide="file-text" class="w-3.5 h-3.5"></i> 指示メモ（任意）
+                <!-- 5. ワンタップ定型タグ & 補足メモ -->
+                <div style="border: 1px solid #DCD4C6; background-color: #FFFFFF;" class="rounded-lg p-3 space-y-2.5">
+                    <div class="flex items-center justify-between">
+                        <span style="color: #4A423D;" class="text-xs font-bold flex items-center gap-1.5">
+                            <i data-lucide="file-text" style="color: #8C6D46;" class="w-3.5 h-3.5"></i> 5. 引き継ぎ・指示タグ（複数選択可）
                         </span>
-                        <div style="background-color: #EDE8DF; border: 1px solid #DCD4C6;" class="flex items-center p-0.5 rounded-md">
-                            <button type="button" onclick="switchNoteMode('text')" id="noteTabBtnText" class="px-2.5 py-1 rounded text-xs font-bold transition-all flex items-center gap-1">
-                                <i data-lucide="keyboard" class="w-3 h-3"></i> テキスト
-                            </button>
-                            <button type="button" onclick="switchNoteMode('canvas')" id="noteTabBtnCanvas" class="px-2.5 py-1 rounded text-xs font-bold transition-all flex items-center gap-1">
-                                <i data-lucide="pen-tool" class="w-3 h-3"></i> 手書き
-                            </button>
-                        </div>
+                        <span style="color: #9E948B;" class="text-[11px]">タップでON/OFF</span>
                     </div>
 
-                    <div id="noteModeText" class="p-2.5">
-                        <textarea id="textNoteInput" rows="2" placeholder="例: グラス・お荷物の移動をお願いします" style="background-color: #FAF8F5; border: 1px solid #DCD4C6; color: #2C2623;" class="w-full rounded-md p-2 text-xs outline-none resize-none"></textarea>
+                    <div id="quickTagButtons" class="chip-wrap">
+                        <!-- Quick tag chips rendered dynamically -->
                     </div>
 
-                    <div id="noteModeCanvas" class="hidden p-2.5 space-y-2">
-                        <div style="background-color: #F5F2EB; border: 1px solid #DCD4C6;" class="flex items-center justify-between p-1.5 rounded-md">
-                            <div class="flex items-center space-x-2 pl-1">
-                                <button type="button" onclick="setModalPenColor('#2C2623')" class="modal-color-btn w-5 h-5 rounded-full ring-2 ring-stone-500 ring-offset-1" style="background-color: #2C2623;" data-color="#2C2623" title="チャコール"></button>
-                                <button type="button" onclick="setModalPenColor('#8E3B3B')" class="modal-color-btn w-5 h-5 rounded-full" style="background-color: #8E3B3B;" data-color="#8E3B3B" title="ボルドー"></button>
-                                <button type="button" onclick="setModalPenColor('#344E68')" class="modal-color-btn w-5 h-5 rounded-full" style="background-color: #344E68;" data-color="#344E68" title="ネイビー"></button>
-                                <button type="button" onclick="setModalPenColor('#8C6D46')" class="modal-color-btn w-5 h-5 rounded-full" style="background-color: #8C6D46;" data-color="#8C6D46" title="ブロンズ"></button>
-                            </div>
-                            <div class="flex items-center space-x-1">
-                                <button type="button" onclick="setModalTool('eraser')" id="modalEraserBtn" style="color: #6E655F;" class="p-1 rounded" title="消しゴム">
-                                    <i data-lucide="eraser" class="w-4 h-4"></i>
-                                </button>
-                                <button type="button" onclick="clearModalCanvas()" style="color: #6E655F;" class="p-1 rounded" title="すべて消去">
-                                    <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
-                                </button>
-                            </div>
-                        </div>
-
-                        <div style="border: 1px solid #DCD4C6;" class="h-24 rounded-md relative overflow-hidden bg-ticket-grid">
-                            <canvas id="ticketCanvas" class="w-full h-full touch-none cursor-crosshair block"></canvas>
-                        </div>
+                    <div class="pt-1">
+                        <input type="text" id="textNoteInput" placeholder="補足メモがあれば入力（任意）" style="background-color: #FAF8F5; border: 1px solid #DCD4C6; color: #2C2623;" class="w-full rounded-md px-3 py-1.5 text-xs outline-none">
                     </div>
                 </div>
 
             </div>
 
-            <div style="background-color: #F5F2EB; border-top: 1px solid #DCD4C6;" class="px-5 py-3 flex items-center justify-end space-x-3">
+            <div style="background-color: #F5F2EB; border-top: 1px solid #DCD4C6;" class="px-5 py-2.5 flex items-center justify-end space-x-3">
                 <button onclick="closeOrderModal()" style="background-color: #FFFFFF; border: 1px solid #DCD4C6; color: #4A423D;" class="px-4 py-2 rounded-lg text-xs font-bold transition-colors">
                     キャンセル
                 </button>
@@ -417,7 +406,7 @@
             }
         };
     </script>
-    <script src="icons.js?v=1"></script>
-    <script src="app.js?v=1"></script>
+    <script src="icons.js?v=2"></script>
+    <script src="app.js?v=2"></script>
 </body>
 </html>
