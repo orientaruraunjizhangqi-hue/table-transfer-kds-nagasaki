@@ -233,13 +233,13 @@ function toggleSound() {
     var icon = document.getElementById('soundIcon');
     if (soundEnabled) {
         icon.setAttribute('data-lucide', 'volume-2');
-        icon.style.color = '#3B5949';
-        showToast('サウンド通知', '通知音をONにしました');
+        icon.style.color = '#221E1B';
+        showToast('通知音', 'ON');
         playChime('push');
     } else {
         icon.setAttribute('data-lucide', 'volume-x');
-        icon.style.color = '#5C534B';
-        showToast('サウンド通知', '通知音をOFFにしました');
+        icon.style.color = '#7A7067';
+        showToast('通知音', 'OFF');
     }
     lucide.createIcons();
 }
@@ -249,38 +249,32 @@ function switchMainTab(tab) {
     currentTab = tab;
     var btnActive = document.getElementById('tabBtnActive');
     var btnCompleted = document.getElementById('tabBtnCompleted');
-    var badgeActive = document.getElementById('activeBadge');
-    var badgeCompleted = document.getElementById('completedBadge');
     var viewActive = document.getElementById('viewActive');
     var viewCompleted = document.getElementById('viewCompleted');
 
     if (tab === 'ACTIVE') {
-        btnActive.style.backgroundColor = '#3A322D';
-        btnActive.style.color = '#FAF8F5';
+        btnActive.style.backgroundColor = '#FFFFFF';
+        btnActive.style.color = '#221E1B';
+        btnActive.style.boxShadow = '0 1px 2px rgba(34, 30, 27, 0.08)';
         btnActive.setAttribute('aria-selected', 'true');
-        badgeActive.style.backgroundColor = '#FAF8F5';
-        badgeActive.style.color = '#26201D';
 
         btnCompleted.style.backgroundColor = 'transparent';
-        btnCompleted.style.color = '#524942';
+        btnCompleted.style.color = '#524A43';
+        btnCompleted.style.boxShadow = 'none';
         btnCompleted.setAttribute('aria-selected', 'false');
-        badgeCompleted.style.backgroundColor = '#D8D0C2';
-        badgeCompleted.style.color = '#26201D';
 
         viewActive.classList.remove('hidden');
         viewCompleted.classList.add('hidden');
     } else {
         btnActive.style.backgroundColor = 'transparent';
-        btnActive.style.color = '#524942';
+        btnActive.style.color = '#524A43';
+        btnActive.style.boxShadow = 'none';
         btnActive.setAttribute('aria-selected', 'false');
-        badgeActive.style.backgroundColor = '#D8D0C2';
-        badgeActive.style.color = '#26201D';
 
-        btnCompleted.style.backgroundColor = '#3A322D';
-        btnCompleted.style.color = '#FAF8F5';
+        btnCompleted.style.backgroundColor = '#FFFFFF';
+        btnCompleted.style.color = '#221E1B';
+        btnCompleted.style.boxShadow = '0 1px 2px rgba(34, 30, 27, 0.08)';
         btnCompleted.setAttribute('aria-selected', 'true');
-        badgeCompleted.style.backgroundColor = '#FAF8F5';
-        badgeCompleted.style.color = '#26201D';
 
         viewActive.classList.add('hidden');
         viewCompleted.classList.remove('hidden');
@@ -308,29 +302,36 @@ function renderTagsAndNoteHtml(order) {
     var hasText = !!(order.textNote && String(order.textNote).trim());
     if (tags.length === 0 && !hasText) return '';
 
-    var tagsHtml = '';
-    if (tags.length > 0) {
-        var chips = [];
-        for (var i = 0; i < tags.length; i++) {
-            var t = tags[i];
-            var isUrgent = (t === 'お急ぎ対応');
-            var style = isUrgent
-                ? 'background-color: #8A261C; color: #FFFFFF; border: 1px solid #8A261C;'
-                : 'background-color: #EDE8DF; color: #3A322D; border: 1px solid #CBBFA9;';
-            chips.push('<span style="' + style + '" class="inline-block text-xs font-bold px-2.5 py-0.5 rounded mr-1.5 mb-1.5">' + escapeHtml(t) + '</span>');
+    var isUrgent = false;
+    var normalTags = [];
+    for (var i = 0; i < tags.length; i++) {
+        if (tags[i] === 'お急ぎ対応') {
+            isUrgent = true;
+        } else {
+            normalTags.push(escapeHtml(tags[i]));
         }
-        tagsHtml = '<div class="flex flex-wrap -mb-1">' + chips.join('') + '</div>';
+    }
+
+    var tagsLine = '';
+    if (isUrgent || normalTags.length > 0) {
+        var urgentBadge = isUrgent
+            ? '<span style="background-color: #8A261C; color: #FFFFFF;" class="inline-block text-[11px] font-bold px-1.5 py-0.5 rounded-sm mr-1.5 align-middle">お急ぎ</span>'
+            : '';
+        var plainItems = normalTags.length > 0
+            ? '<span style="color: #221E1B;" class="text-xs font-semibold align-middle">' + normalTags.join('　/　') + '</span>'
+            : '';
+        tagsLine = '<div class="leading-relaxed">' + urgentBadge + plainItems + '</div>';
     }
 
     var textHtml = '';
     if (hasText) {
-        textHtml = '<div style="color: #26201D;" class="text-xs font-medium leading-relaxed break-words ' + (tags.length > 0 ? 'mt-1.5 pt-1.5 border-t border-stone-200' : '') + '">' +
+        textHtml = '<div style="color: #524A43;" class="text-xs leading-relaxed break-words ' + (tagsLine ? 'mt-1' : '') + '">' +
             escapeHtml(order.textNote) +
             '</div>';
     }
 
-    return '<div style="background-color: #FAF8F5; border: 1px solid #DFD7C5;" class="mb-3 rounded-lg p-2.5">' +
-        tagsHtml +
+    return '<div style="border-top: 1px solid #EAE4D8;" class="pt-2.5 mb-3.5">' +
+        tagsLine +
         textHtml +
         '</div>';
 }
@@ -358,68 +359,61 @@ function renderActiveOrders() {
         var isMale = (order.gender || '男性') === '男性';
         var tags = getOrderTags(order);
         var hasUrgentTag = indexOfStr(tags, 'お急ぎ対応') !== -1;
+        var isDanger = (elapsedMins >= 10 || hasUrgentTag);
 
-        var cardBg = isMale ? '#FAFBFD' : '#FDFBFA';
-        var cardBorder = isMale ? '#BCC9D8' : '#DDBEC1';
-        var topBarColor = isMale ? '#2D465E' : '#733A40';
-        var badgeStyle = isMale
-            ? 'background-color: #2D465E; color: #FFFFFF;'
+        var topBarColor = isDanger ? '#8A261C' : (isMale ? '#2B4257' : '#733A40');
+        var cardBorder = isDanger ? '#C9908A' : '#D8D0C0';
+        var genderBadgeStyle = isMale
+            ? 'background-color: #2B4257; color: #FFFFFF;'
             : 'background-color: #733A40; color: #FFFFFF;';
         var genderLabel = isMale ? '男性' : '女性';
 
         var mvObj = getMoveTypeObj(order.moveType || '相席開始');
-        var mvBadgeStyle = 'background-color: ' + mvObj.bg + '; color: ' + mvObj.text + '; border: 1px solid ' + mvObj.border + ';';
 
-        var timerStyle = 'background-color: #EFF3F0; color: #244534; border: 1px solid #B8CEC2;';
-        var urgencyCls = '';
-        if (elapsedMins >= 10 || hasUrgentTag) {
-            urgencyCls = 'urgency-danger';
-            timerStyle = 'background-color: #FBE9E7; color: #8A261C; border: 1px solid #DFA39C;';
+        var timerColor = '#524A43';
+        if (isDanger) {
+            timerColor = '#8A261C';
         } else if (elapsedMins >= 5) {
-            timerStyle = 'background-color: #FAF0E1; color: #6B420F; border: 1px solid #DEC196;';
+            timerColor = '#7A4810';
         }
 
         var fromColor = getTableColorObj(order.fromTable);
         var toColor = getTableColorObj(order.toTable);
 
         var card = document.createElement('div');
-        card.className = 'rounded-xl p-4 flex flex-col shadow-sm relative overflow-hidden transition-all ' + urgencyCls;
-        card.style.backgroundColor = cardBg;
+        card.className = 'rounded-md p-4 flex flex-col relative overflow-hidden';
+        card.style.backgroundColor = '#FFFFFF';
         card.style.border = '1px solid ' + cardBorder;
-        card.style.borderTop = '4px solid ' + topBarColor;
+        card.style.borderTop = '3px solid ' + topBarColor;
 
         card.innerHTML =
-            '<div style="border-bottom: 1px solid #E5DEC9;" class="flex items-center justify-between pb-2.5 mb-3 gap-1">' +
-                '<div class="flex items-center gap-1.5 flex-wrap">' +
-                    '<span style="' + badgeStyle + '" class="text-xs px-2.5 py-0.5 rounded font-bold tracking-wider">' +
+            '<div style="border-bottom: 1px solid #EAE4D8;" class="flex items-center justify-between pb-2.5 mb-3.5 gap-2">' +
+                '<div class="flex items-center gap-2 min-w-0">' +
+                    '<span style="' + genderBadgeStyle + '" class="text-[11px] px-2 py-0.5 rounded-sm font-bold flex-none">' +
                         genderLabel +
                     '</span>' +
-                    '<span style="' + mvBadgeStyle + '" class="text-xs px-2.5 py-0.5 rounded font-bold">' +
+                    '<span style="color: #221E1B;" class="text-sm font-bold truncate">' +
                         escapeHtml(mvObj.label) +
                     '</span>' +
                 '</div>' +
-                '<div style="' + timerStyle + '" class="px-2.5 py-0.5 rounded text-xs font-mono font-bold flex items-center space-x-1 flex-none" data-timer="' + order.createdAt + '">' +
-                    '<i data-lucide="clock" class="w-3.5 h-3.5"></i>' +
+                '<div style="color: ' + timerColor + ';" class="tabular-nums font-mono text-xs font-bold flex-none" data-timer="' + order.createdAt + '">' +
                     '<span>' + pad(elapsedMins) + ':' + pad(elapsedSecs) + '</span>' +
                 '</div>' +
             '</div>' +
-            '<div style="background-color: #F5F2EB; border: 1px solid #D5CBB8;" class="p-3 rounded-lg flex items-center justify-between mb-3">' +
+            '<div class="flex items-center justify-between py-1 mb-3.5">' +
                 '<div class="text-center flex-1">' +
-                    '<div style="color: #524942;" class="text-[11px] font-bold mb-1 tracking-wider">FROM / 移動元</div>' +
-                    '<div class="inline-block min-w-[64px] px-4 py-1.5 rounded-lg border font-black text-xl font-mono ' + fromColor.cls + '">' + escapeHtml(order.fromTable) + '</div>' +
+                    '<div style="color: #5E554D;" class="text-[11px] font-medium mb-1">移動元</div>' +
+                    '<div class="tabular-nums inline-block min-w-[72px] px-4 py-1.5 rounded border font-bold text-2xl tracking-wide ' + fromColor.cls + '">' + escapeHtml(order.fromTable) + '</div>' +
                 '</div>' +
-                '<div class="flex flex-col items-center mx-2">' +
-                    '<i data-lucide="arrow-right" style="color: #705330;" class="w-5 h-5"></i>' +
-                '</div>' +
+                '<div aria-hidden="true" style="color: #7A7067;" class="px-2 pt-4 text-lg select-none">→</div>' +
                 '<div class="text-center flex-1">' +
-                    '<div style="color: #524942;" class="text-[11px] font-bold mb-1 tracking-wider">TO / 移動先</div>' +
-                    '<div class="inline-block min-w-[64px] px-4 py-1.5 rounded-lg border font-black text-xl font-mono ' + toColor.cls + '">' + escapeHtml(order.toTable) + '</div>' +
+                    '<div style="color: #5E554D;" class="text-[11px] font-medium mb-1">移動先</div>' +
+                    '<div class="tabular-nums inline-block min-w-[72px] px-4 py-1.5 rounded border font-bold text-2xl tracking-wide ' + toColor.cls + '">' + escapeHtml(order.toTable) + '</div>' +
                 '</div>' +
             '</div>' +
             renderTagsAndNoteHtml(order) +
-            '<button type="button" onclick="completeOrder(\'' + escapeJsAttr(order.id) + '\')" style="background-color: #3B5949; color: #FFFFFF;" class="tap-primary mt-auto w-full hover:opacity-90 rounded-lg font-bold text-sm shadow-sm transition-all flex items-center justify-center gap-2">' +
-                '<i data-lucide="check-circle" class="w-4 h-4"></i>' +
-                '<span>移動完了</span>' +
+            '<button type="button" onclick="completeOrder(\'' + escapeJsAttr(order.id) + '\')" style="background-color: #EFECE4; color: #221E1B; border: 1px solid #CFC6B4;" class="tap-primary mt-auto w-full hover:bg-stone-200 rounded font-bold text-sm transition-colors flex items-center justify-center">' +
+                '移動完了' +
             '</button>';
         grid.appendChild(card);
     });
@@ -447,9 +441,11 @@ function renderCompletedOrders() {
     }
 
     if (completed.length === 0) {
+        list.classList.add('hidden');
         empty.classList.remove('hidden');
         return;
     }
+    list.classList.remove('hidden');
     empty.classList.add('hidden');
 
     completed.sort(function (a, b) { return (b.completedAt || 0) - (a.completedAt || 0); });
@@ -458,53 +454,41 @@ function renderCompletedOrders() {
         var finishedTime = order.completedAt ? formatHM(order.completedAt) : '--:--';
         var isMale = (order.gender || '男性') === '男性';
         var badgeStyle = isMale
-            ? 'background-color: #2D465E; color: #FFFFFF;'
+            ? 'background-color: #2B4257; color: #FFFFFF;'
             : 'background-color: #733A40; color: #FFFFFF;';
         var mvObj = getMoveTypeObj(order.moveType || '相席開始');
-        var mvBadgeStyle = 'background-color: ' + mvObj.bg + '; color: ' + mvObj.text + '; border: 1px solid ' + mvObj.border + ';';
-
-        var fromColor = getTableColorObj(order.fromTable);
-        var toColor = getTableColorObj(order.toTable);
 
         var tags = getOrderTags(order);
         var summaryParts = [];
         if (tags.length > 0) summaryParts.push(tags.join(' / '));
         if (order.textNote) summaryParts.push(order.textNote);
         var notePreview = summaryParts.length > 0
-            ? '<span style="color: #634826;">' + escapeHtml(summaryParts.join(' — ')) + '</span>'
+            ? '<span style="color: #524A43;" class="text-xs truncate">' + escapeHtml(summaryParts.join(' — ')) + '</span>'
             : '';
 
         var row = document.createElement('div');
-        row.className = 'rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm';
-        row.style.backgroundColor = '#FDFBF7';
-        row.style.border = '1px solid #D5CBB8';
+        row.className = 'px-4 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3';
         row.innerHTML =
-            '<div class="flex items-center space-x-2.5 flex-1 min-w-0 flex-wrap gap-y-1">' +
-                '<span style="' + badgeStyle + '" class="text-xs px-2 py-0.5 rounded font-bold flex-none">' +
+            '<div class="flex items-center gap-3 flex-1 min-w-0 flex-wrap">' +
+                '<span style="color: #524A43;" class="tabular-nums font-mono text-xs font-medium flex-none">' + finishedTime + '</span>' +
+                '<span style="' + badgeStyle + '" class="text-[11px] px-1.5 py-0.5 rounded-sm font-bold flex-none">' +
                     escapeHtml(order.gender || '男性') +
                 '</span>' +
-                '<span style="' + mvBadgeStyle + '" class="text-xs px-2 py-0.5 rounded font-bold flex-none">' +
+                '<span style="color: #221E1B;" class="text-xs font-bold flex-none">' +
                     escapeHtml(mvObj.label) +
                 '</span>' +
-                '<div class="flex items-center gap-1.5 flex-none font-mono font-bold text-sm">' +
-                    '<span class="px-2.5 py-0.5 rounded border ' + fromColor.cls + '">' + escapeHtml(order.fromTable) + '</span>' +
-                    '<i data-lucide="arrow-right" style="color: #705330;" class="w-4 h-4"></i>' +
-                    '<span class="px-2.5 py-0.5 rounded border ' + toColor.cls + '">' + escapeHtml(order.toTable) + '</span>' +
+                '<div style="color: #221E1B;" class="tabular-nums flex items-center gap-1.5 flex-none font-bold text-sm tracking-wide">' +
+                    '<span>' + escapeHtml(order.fromTable) + '</span>' +
+                    '<span aria-hidden="true" style="color: #7A7067;">→</span>' +
+                    '<span>' + escapeHtml(order.toTable) + '</span>' +
                 '</div>' +
-                '<div class="truncate">' +
-                    (notePreview ? '<div class="text-xs font-bold truncate">' + notePreview + '</div>' : '') +
-                    '<div style="color: #524942;" class="text-xs flex items-center gap-2">' +
-                        '<span>完了: ' + finishedTime + '</span><span aria-hidden="true">•</span><span>' + escapeHtml(order.no || order.id) + '</span>' +
-                    '</div>' +
-                '</div>' +
+                notePreview +
             '</div>' +
-            '<button type="button" onclick="restoreOrder(\'' + escapeJsAttr(order.id) + '\')" style="background-color: #F5F2EB; color: #4A3825; border: 1px solid #CBBFA9;" class="tap-target px-3.5 hover:bg-stone-200 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 flex-none">' +
-                '<i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i><span>移動待ちに戻す</span>' +
+            '<button type="button" onclick="restoreOrder(\'' + escapeJsAttr(order.id) + '\')" aria-label="伝票を移動待ちに戻す" style="background-color: #FFFFFF; color: #221E1B; border: 1px solid #CFC6B4;" class="tap-target px-3.5 hover:bg-stone-100 rounded text-xs font-semibold transition-colors flex items-center justify-center flex-none">' +
+                '戻す' +
             '</button>';
         list.appendChild(row);
     });
-
-    lucide.createIcons();
 }
 
 // ===================== 操作 =====================
@@ -600,32 +584,30 @@ function renderMgmtTablesGrid() {
     container.innerHTML = '';
 
     if (registeredTables.length === 0) {
-        container.innerHTML = '<div style="color: #524942;" class="text-center py-4 text-xs font-semibold">登録されている卓はありません</div>';
+        container.innerHTML = '<div style="color: #524A43;" class="text-center py-6 text-xs font-medium">登録されている卓はありません</div>';
         return;
     }
 
     registeredTables.forEach(function (tbl) {
         var curColor = getTableColorObj(tbl.name);
         var item = document.createElement('div');
-        item.style.backgroundColor = '#FFFFFF';
-        item.style.border = '1px solid #D5CBB8';
-        item.className = 'flex items-center justify-between px-3 py-1.5 rounded-lg gap-2';
+        item.className = 'flex items-center justify-between px-3 py-1.5 gap-2';
 
         var dotsHtml = COLOR_PRESETS.map(function (p) {
             var isCur = (p.id === tbl.colorId);
             return '<button type="button" onclick="setTableColor(\'' + escapeJsAttr(tbl.name) + '\', \'' + p.id + '\')" ' +
                 'aria-label="卓 ' + escapeHtml(tbl.name) + ' の色を ' + escapeHtml(p.name) + ' に変更" ' +
-                'class="tap-target w-11 h-11 rounded-lg flex items-center justify-center hover:bg-stone-200 transition-colors" title="' + escapeHtml(p.name) + '">' +
-                '<span aria-hidden="true" class="w-5 h-5 rounded-full transition-transform ' + (isCur ? 'scale-125 ring-2 ring-stone-700' : 'opacity-70') + '" ' +
+                'class="tap-target w-11 h-11 rounded flex items-center justify-center hover:bg-stone-100 transition-colors" title="' + escapeHtml(p.name) + '">' +
+                '<span aria-hidden="true" class="w-4 h-4 rounded-full transition-transform ' + (isCur ? 'scale-125 ring-2 ring-stone-800' : 'opacity-60') + '" ' +
                 'style="background-color: ' + p.dot + ';"></span>' +
                 '</button>';
         }).join('');
 
         item.innerHTML =
-            '<span class="inline-block px-3 py-1 rounded border text-sm font-mono font-bold ' + curColor.cls + '">' + escapeHtml(tbl.name) + '</span>' +
+            '<span class="tabular-nums inline-block min-w-[44px] text-center px-2.5 py-1 rounded border text-sm font-bold tracking-wide ' + curColor.cls + '">' + escapeHtml(tbl.name) + '</span>' +
             '<div class="flex items-center gap-1">' +
-                '<div class="flex items-center rounded-lg" style="background-color: #F5F2EB; border: 1px solid #D5CBB8;">' + dotsHtml + '</div>' +
-                '<button type="button" onclick="removeTable(\'' + escapeJsAttr(tbl.name) + '\')" aria-label="卓 ' + escapeHtml(tbl.name) + ' を削除" style="color: #8A261C;" class="tap-target w-11 h-11 hover:bg-stone-100 rounded-lg transition-colors flex items-center justify-center" title="削除">' +
+                '<div class="flex items-center">' + dotsHtml + '</div>' +
+                '<button type="button" onclick="removeTable(\'' + escapeJsAttr(tbl.name) + '\')" aria-label="卓 ' + escapeHtml(tbl.name) + ' を削除" style="color: #8A261C;" class="tap-target w-11 h-11 hover:bg-stone-100 rounded transition-colors flex items-center justify-center" title="削除">' +
                     '<i data-lucide="trash-2" class="w-4 h-4"></i>' +
                 '</button>' +
             '</div>';
@@ -645,25 +627,21 @@ function renderGenderButtons() {
     var btnFemale = document.getElementById('genderBtnFemale');
 
     if (selectedGender === '男性') {
-        btnMale.style.backgroundColor = '#2D465E';
-        btnMale.style.borderColor = '#2D465E';
+        btnMale.style.backgroundColor = '#2B4257';
+        btnMale.style.borderColor = '#2B4257';
         btnMale.style.color = '#FFFFFF';
-        btnMale.querySelector('span').style.backgroundColor = '#FFFFFF';
 
         btnFemale.style.backgroundColor = '#FFFFFF';
-        btnFemale.style.borderColor = '#CBBFA9';
-        btnFemale.style.color = '#3A322D';
-        btnFemale.querySelector('span').style.backgroundColor = '#733A40';
+        btnFemale.style.borderColor = '#CFC6B4';
+        btnFemale.style.color = '#221E1B';
     } else {
         btnMale.style.backgroundColor = '#FFFFFF';
-        btnMale.style.borderColor = '#CBBFA9';
-        btnMale.style.color = '#3A322D';
-        btnMale.querySelector('span').style.backgroundColor = '#2D465E';
+        btnMale.style.borderColor = '#CFC6B4';
+        btnMale.style.color = '#221E1B';
 
         btnFemale.style.backgroundColor = '#733A40';
         btnFemale.style.borderColor = '#733A40';
         btnFemale.style.color = '#FFFFFF';
-        btnFemale.querySelector('span').style.backgroundColor = '#FFFFFF';
     }
 }
 
@@ -680,17 +658,17 @@ function renderMoveTypeButtons() {
         var active = (selectedMoveType === m.id);
         var btn = document.createElement('button');
         btn.type = 'button';
+        btn.setAttribute('aria-pressed', active ? 'true' : 'false');
         btn.onclick = function () { selectMoveType(m.id); };
-        btn.className = 'chip-btn px-2.5 rounded-lg border text-xs font-bold transition-all flex items-center justify-center';
+        btn.className = 'chip-btn px-2.5 rounded border text-xs font-bold transition-colors flex items-center justify-center';
         if (active) {
-            btn.style.backgroundColor = '#3A322D';
-            btn.style.borderColor = '#3A322D';
-            btn.style.color = '#FAF8F5';
-            btn.style.boxShadow = '0 1px 4px rgba(58, 50, 45, 0.22)';
+            btn.style.backgroundColor = '#26201D';
+            btn.style.borderColor = '#26201D';
+            btn.style.color = '#FAF8F4';
         } else {
             btn.style.backgroundColor = '#FFFFFF';
-            btn.style.borderColor = '#CBBFA9';
-            btn.style.color = '#3A322D';
+            btn.style.borderColor = '#CFC6B4';
+            btn.style.color = '#221E1B';
         }
         btn.textContent = m.label;
         container.appendChild(btn);
@@ -715,8 +693,9 @@ function renderQuickTagButtons() {
         var active = indexOfStr(selectedTags, t.id) !== -1;
         var btn = document.createElement('button');
         btn.type = 'button';
+        btn.setAttribute('aria-pressed', active ? 'true' : 'false');
         btn.onclick = function () { toggleQuickTag(t.id); };
-        btn.className = 'chip-btn px-3 rounded-lg border text-xs font-bold transition-all flex items-center justify-center gap-1';
+        btn.className = 'chip-btn px-3 rounded border text-xs font-semibold transition-colors flex items-center justify-center';
 
         if (active) {
             if (t.urgent) {
@@ -724,18 +703,17 @@ function renderQuickTagButtons() {
                 btn.style.borderColor = '#8A261C';
                 btn.style.color = '#FFFFFF';
             } else {
-                btn.style.backgroundColor = '#705330';
-                btn.style.borderColor = '#705330';
-                btn.style.color = '#FFFFFF';
+                btn.style.backgroundColor = '#26201D';
+                btn.style.borderColor = '#26201D';
+                btn.style.color = '#FAF8F4';
             }
         } else {
-            btn.style.backgroundColor = '#FAF8F5';
-            btn.style.borderColor = t.urgent ? '#DFA39C' : '#CBBFA9';
-            btn.style.color = t.urgent ? '#8A261C' : '#3A322D';
+            btn.style.backgroundColor = '#FFFFFF';
+            btn.style.borderColor = t.urgent ? '#D6A39E' : '#CFC6B4';
+            btn.style.color = t.urgent ? '#8A261C' : '#221E1B';
         }
 
-        var checkMark = active ? '✓ ' : '+ ';
-        btn.textContent = checkMark + t.id;
+        btn.textContent = t.id;
         container.appendChild(btn);
     });
 }
@@ -744,8 +722,9 @@ function createFloorButton(tblName, isSelected, selClass, onClickFn) {
     var colorObj = getTableColorObj(tblName);
     var btn = document.createElement('button');
     btn.type = 'button';
+    btn.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
     btn.onclick = onClickFn;
-    btn.className = 'floor-cell rounded-lg border font-mono text-sm transition-all flex items-center justify-center ' +
+    btn.className = 'floor-cell tabular-nums rounded border text-sm tracking-wide transition-colors flex items-center justify-center ' +
         colorObj.cls + (isSelected ? ' font-black ' + selClass : ' font-bold');
     btn.textContent = tblName;
     return btn;
@@ -765,7 +744,7 @@ function renderTableButtons() {
     registeredTables.forEach(function (t) { regMap[t.name] = t; });
     var placed = {};
 
-    // 1. 6行×5列のフロア配置どおりに並べる
+    // 1. 6行×5列のフロア配置どおりに並べる (通路・空マスは枠なし空間として抜く)
     for (var r = 0; r < FLOOR_LAYOUT.length; r++) {
         for (var c = 0; c < FLOOR_LAYOUT[r].length; c++) {
             var name = FLOOR_LAYOUT[r][c];
@@ -789,13 +768,11 @@ function renderTableButtons() {
                 var emptyFrom = document.createElement('div');
                 emptyFrom.className = 'floor-empty';
                 emptyFrom.setAttribute('aria-hidden', 'true');
-                emptyFrom.textContent = '—';
                 fromContainer.appendChild(emptyFrom);
 
                 var emptyTo = document.createElement('div');
                 emptyTo.className = 'floor-empty';
                 emptyTo.setAttribute('aria-hidden', 'true');
-                emptyTo.textContent = '—';
                 toContainer.appendChild(emptyTo);
             }
         }
